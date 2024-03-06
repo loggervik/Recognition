@@ -23,6 +23,11 @@ class TransparentScreenCaptureTool:
         self.canvas.bind("<B1-Motion>", self.on_drag)
         self.canvas.bind("<ButtonRelease-1>", self.on_release)
         self.region_selected = False
+        self.start_x = 0  # 添加初始化
+        self.start_y = 0  # 添加初始化
+        self.end_x = 0
+        self.end_y = 0
+        self.region = []
 
     def on_press(self, event):
         self.start_x = event.x
@@ -36,18 +41,34 @@ class TransparentScreenCaptureTool:
         self.canvas.create_rectangle(self.start_x, self.start_y, self.end_x, self.end_y, outline="red",
                                      tags="rectangle")
 
-    def on_release(self, event):
-        self.region = [self.start_x, self.start_y, self.end_x - self.start_x, self.end_y - self.start_y]
+    def on_release(self, _):
+        self.region = [
+            min(self.start_x, self.end_x),
+            min(self.start_y, self.end_y),
+            abs(self.end_x - self.start_x),
+            abs(self.end_y - self.start_y)
+        ]
         self.region_selected = True
         self.canvas.delete("rectangle")  # 清除绘制的矩形
         self.root.destroy()  # 关闭区域选择窗口
+
+
+def check_value_within_range(value, range_entry):
+    range_text = range_entry.get()
+    try:
+        lower, upper = map(float, range_text.split(','))
+        if lower <= value <= upper:
+            return True
+    except ValueError:
+        pass
+    return False
 
 
 class ScreenshotApp:
     def __init__(self, root):
         self.root = root
         root.title("校验")
-        root.geometry("600x500")
+        root.geometry("520x630")
         self.display_textboxes = []
         self.range_entries = []  # 保存范围文本框的列表
         self.labels = []
@@ -56,8 +77,8 @@ class ScreenshotApp:
         for i in range(10):
             label = tk.Label(root, text=f"{labels[i]}:")
             display_textbox = ttk.Entry(root, state="readonly")  # 创建只读文本框用于显示识别内容
-            range_entry = tk.Entry(root, width=20)  # 范围输入文本框
-            select_button = tk.Button(root, text="选择截图区域", command=lambda i=i: self.select_area(i))
+            range_entry = tk.Entry(root, width=10)  # 范围输入文本框
+            select_button = tk.Button(root, text="选择截图区域", command=lambda index=i: self.select_area(index))
             label.grid(row=i, column=0, padx=(10, 0), pady=10, sticky="e")
             display_textbox.grid(row=i, column=1, padx=(0, 10), pady=10, sticky="w")
             range_entry.grid(row=i, column=2, padx=(0, 10), pady=10, sticky="w")
@@ -80,7 +101,7 @@ class ScreenshotApp:
             regions[index] = tool.region
             screenshot = pyautogui.screenshot(region=tool.region)
             recognized_text = pytesseract.image_to_string(screenshot)
-            filtered_text = self.filter_math_content(recognized_text)  # 过滤文本，仅保留数学内容
+            filtered_text = filter_math_content(recognized_text)  # 过滤文本，仅保留数学内容
             self.set_display_textbox_content(index, filtered_text)
             del screenshot  # 释放截图对象占用的内存
 
@@ -93,48 +114,43 @@ class ScreenshotApp:
         # 检查数值是否在范围内
         try:
             value = float(content)
-            if not self.check_value_within_range(value, self.range_entries[index]):
+            if not check_value_within_range(value, self.range_entries[index]):
                 self.flash_entry(self.range_entries[index])
+            else:
+                self.range_entries[index].configure(bg="white")
         except ValueError:
             pass
 
-    def check_value_within_range(self, value, range_entry):
-        range_text = range_entry.get()
-        try:
-            lower, upper = map(float, range_text.split(','))
-            if lower <= value <= upper:
-                return True
-        except ValueError:
-            pass
-        return False
-
-    def flash_entry(self, entry):
+    def flash_entry(self, entry, times=5):
         current_color = entry.cget("bg")
         new_color = "red" if current_color == "white" else "white"
         entry.configure(bg=new_color)
-        self.root.after(500, lambda: self.flash_entry(entry))
-
-    def filter_math_content(self, text):
-        pattern = r"[-+]?[0-9]*\.?[0-9]+"
-        matches = re.findall(pattern, text)
-        return ' '.join(matches)
+        times -= 1
+        if times > 0:
+            self.root.after(500, lambda: self.flash_entry(entry, times))
 
     def text_recognition_loop(self):
         while True:
-            time.sleep(5)  # 每5秒检查一次
+            time.sleep(1)  # 每1秒检查一次
             for i, region in enumerate(regions):
                 if region:
                     screenshot = pyautogui.screenshot(region=region)
-                    recognized_text = pytesseract.image_to_string(screenshot)
-                    self.root.after(0, lambda i=i, text=recognized_text: self.set_display_textbox_content(i,
-                                                                                                          self.filter_math_content(
-                                                                                                              text)))
+                    recognized_text = pytesseract.image_to_string(screenshot, config='--psm 6')
+                    self.root.after(0, lambda index=i, text=recognized_text: self.set_display_textbox_content(index, filter_math_content(text)))
                     del screenshot  # 释放截图对象占用的内存
+
+
+def filter_math_content(text):
+    # pattern = r"[-+]?[0-9]*\.?[0-9]+"
+    # pattern = r"[-+]?\d*\.?\d+"
+    pattern = r"[-−]?\d*\.?\d+"
+    matches = re.findall(pattern, text)
+    return ' '.join(matches)
 
 
 def main():
     root = tk.Tk()
-    app = ScreenshotApp(root)
+    ScreenshotApp(root)
     root.mainloop()
 
 
