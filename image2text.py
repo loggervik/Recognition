@@ -1,14 +1,47 @@
 import tkinter as tk
 from tkinter import ttk  # 导入ttk模块，用于创建只读文本框
-import pyautogui
 import threading
 import time
 import pytesseract
 import re
+import sys
+import os
+from PIL import ImageGrab
+import ctypes
+
+
+# 获取系统DPI设置
+def get_scaling_factor():
+    # Set process DPI awareness
+    ctypes.windll.shcore.SetProcessDpiAwareness(1)
+
+    # Get desktop handle
+    hDesktop = ctypes.windll.user32.GetDesktopWindow()
+
+    # Get DPI for primary monitor
+    dpi = ctypes.windll.user32.GetDpiForWindow(hDesktop)
+    scaling_factor = dpi / 96.0  # Windows默认DPI为96
+    return scaling_factor
+
+
+# 调整bbox坐标
+def adjust_bbox_for_scaling(bbox, scaling_factor):
+    return tuple([int(coord * scaling_factor) for coord in bbox])
+
+
+if hasattr(sys, '_MEIPASS'):
+
+    # 如果程序被PyInstaller打包，则使用打包后的临时路径
+    base_path = sys._MEIPASS
+else:
+    # 如果程序没有被打包，则使用正常的__file__路径
+    base_path = os.path.dirname(os.path.abspath(__file__))
+
+pytesseract.pytesseract.tesseract_cmd = os.path.join(base_path, 'Tesseract-OCR', 'tesseract.exe')
 
 # 设置 Tesseract OCR 的路径
-pytesseract.pytesseract.tesseract_cmd = r'D:\Program Files\Tesseract-OCR\tesseract.exe'
 regions = [[], [], [], [], [], [], [], [], [], []]
+scaling_factor = get_scaling_factor()
 
 
 class TransparentScreenCaptureTool:
@@ -99,11 +132,14 @@ class ScreenshotApp:
         self.root.wait_window(tool.root)  # 等待用户完成区域选择
         if tool.region_selected:
             regions[index] = tool.region
-            screenshot = pyautogui.screenshot(region=tool.region)
+            # 使用 ImageGrab.grab() 替换 pyautogui.screenshot()
+            bbox = (tool.region[0], tool.region[1], tool.region[0] + tool.region[2], tool.region[1] + tool.region[3])
+            adjusted_bbox = adjust_bbox_for_scaling(bbox, scaling_factor)
+            screenshot = ImageGrab.grab(bbox=bbox)
             recognized_text = pytesseract.image_to_string(screenshot)
             filtered_text = filter_math_content(recognized_text)  # 过滤文本，仅保留数学内容
             self.set_display_textbox_content(index, filtered_text)
-            del screenshot  # 释放截图对象占用的内存
+            # 释放截图对象占用的内存不再是必要的操作
 
     def set_display_textbox_content(self, index, content):
         self.display_textboxes[index].configure(state="normal")
@@ -134,10 +170,14 @@ class ScreenshotApp:
             time.sleep(1)  # 每1秒检查一次
             for i, region in enumerate(regions):
                 if region:
-                    screenshot = pyautogui.screenshot(region=region)
+                    bbox = (region[0], region[1], region[0] + region[2], region[1] + region[3])
+                    adjusted_bbox = adjust_bbox_for_scaling(bbox, scaling_factor)
+                    screenshot = ImageGrab.grab(bbox=bbox)
                     recognized_text = pytesseract.image_to_string(screenshot, config='--psm 6')
-                    self.root.after(0, lambda index=i, text=recognized_text: self.set_display_textbox_content(index, filter_math_content(text)))
-                    del screenshot  # 释放截图对象占用的内存
+                    self.root.after(0, lambda index=i, text=recognized_text: self.set_display_textbox_content(index,
+                                                                                                              filter_math_content(
+                                                                                                                  text)))
+                    # 释放截图对象占用的内存不再是必要的操作
 
 
 def filter_math_content(text):
