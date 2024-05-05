@@ -1,4 +1,3 @@
-
 import tkinter as tk
 from tkinter import ttk, messagebox   # 导入ttk模块，用于创建只读文本框
 import threading
@@ -39,7 +38,7 @@ else:
     # 如果程序没有被打包，则使用正常的__file__路径
     base_path = os.path.dirname(os.path.abspath(__file__))
 
-pytesseract.pytesseract.tesseract_cmd = os.path.join(base_path, 'Tesseract-OCR', 'tesseract.exe')
+pytesseract.pytesseract.tesseract_cmd = os.path.join(base_path, 'ocr', 'tesseract.exe')
 
 # 设置 Tesseract OCR 的路径
 regions = [[], [], [], [], [], [], [], [], [], []]
