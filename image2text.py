@@ -1,4 +1,3 @@
-
 import tkinter as tk
 from tkinter import ttk, messagebox   # 导入ttk模块，用于创建只读文本框
 import threading
